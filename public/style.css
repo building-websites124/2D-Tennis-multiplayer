@@ -1,0 +1,138 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+  background: #12181f;
+  color: #ffffff;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+h1 {
+  font-size: 2.5rem;
+  color: #38bdf8;
+  text-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+}
+
+.card {
+  background: #1e293b;
+  padding: 30px;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+  text-align: center;
+  width: 350px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.btn {
+  padding: 12px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: transform 0.1s, opacity 0.2s;
+}
+
+.btn:hover { opacity: 0.9; }
+.btn:active { transform: scale(0.98); }
+.primary { background: #22c55e; color: white; }
+.secondary { background: #3b82f6; color: white; }
+
+input[type="text"] {
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #38bdf8;
+  font-size: 1.2rem;
+  text-align: center;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+
+.divider { color: #64748b; font-size: 0.9rem; font-weight: bold; }
+.code-box {
+  background: #0f172a;
+  padding: 15px;
+  font-size: 2rem;
+  letter-spacing: 5px;
+  color: #38bdf8;
+  border-radius: 8px;
+  font-family: monospace;
+  border: 2px dashed #334155;
+}
+
+.hidden { display: none !important; }
+.error { color: #ef4444; font-size: 0.9rem; }
+.hint { color: #94a3b8; font-size: 0.85rem; }
+
+/* Arena Styling */
+.scoreboard {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 500px;
+  background: #1e293b;
+  padding: 10px 20px;
+  border-radius: 8px 8px 0 0;
+  font-weight: bold;
+}
+
+.p1 { color: #38bdf8; }
+.p2 { color: #f43f5e; }
+.room-tag { font-size: 0.85rem; color: #94a3b8; background: #0f172a; padding: 4px 8px; border-radius: 4px; }
+
+.canvas-container {
+  position: relative;
+  width: 500px;
+  height: 700px;
+  box-shadow: 0 15px 35px rgba(0,0,0,0.6);
+}
+
+canvas {
+  background: #15803d; /* Real tennis court green */
+  border: 4px solid #ffffff;
+  border-radius: 0 0 8px 8px;
+}
+
+.overlay {
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(15, 23, 42, 0.85);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+  border-radius: 0 0 8px 8px;
+}
+
+.overlay h2 { font-size: 2.5rem; color: #fbbf24; }
+
+.controls-hint {
+  max-width: 500px;
+  text-align: center;
+  font-size: 0.9rem;
+  color: #cbd5e1;
+  background: #1e293b;
+  padding: 12px;
+  border-radius: 8px;
+}
+.controls-hint span { background: #334155; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-weight: bold; }
+.timing-tip { font-size: 0.8rem; color: #fbbf24; margin-top: 5px; }
