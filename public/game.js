@@ -47,6 +47,10 @@ socket.on('roomJoined', (data) => {
   displayCode.innerText = data.roomCode;
   gameRoomCode.innerText = data.roomCode;
   waiting.classList.remove('hidden');
+
+  // Update the HTML text nodes directly so "You" is always on the correct player
+  score1.previousSibling.textContent = myPlayerNum === 1 ? 'Player 1 (You): ' : 'Player 1 (Opponent): ';
+  score2.previousSibling.textContent = myPlayerNum === 2 ? 'Player 2 (You): ' : 'Player 2 (Opponent): ';
 });
 
 socket.on('waitingForOpponent', () => {

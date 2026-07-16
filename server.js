@@ -76,11 +76,13 @@ io.on('connection', (socket) => {
 
   socket.on('move', (data) => {
     const room = rooms[socket.roomCode];
-    if (!room || room.state !== 'playing') return;
+    // Allow movement during both playing and serving states
+    if (!room || (room.state !== 'playing' && room.state !== 'serving')) return;
     const player = room.players[socket.id];
     if (!player) return;
 
-    const speed = 6;
+    // Increased player speed from 6 to 9.5 for snappier court coverage!
+    const speed = 9.5;
     if (data.up) player.y -= speed;
     if (data.down) player.y += speed;
     if (data.left) player.x -= speed;
