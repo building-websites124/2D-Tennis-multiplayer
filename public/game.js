@@ -1,6 +1,5 @@
 const socket = io();
 
-// UI Elements
 const menu = document.getElementById('menu');
 const waiting = document.getElementById('waiting');
 const gameArena = document.getElementById('gameArena');
@@ -15,16 +14,16 @@ const score1 = document.getElementById('score1');
 const score2 = document.getElementById('score2');
 const overlay = document.getElementById('overlay');
 const winnerText = document.getElementById('winnerText');
-
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
 let myPlayerNum = 0;
 let gameState = null;
 let hitEffects = [];
+let pointMessage = null; 
+let ballTrail = [];      
 const keys = { w: false, a: false, s: false, d: false };
 
-// Button Listeners
 createBtn.addEventListener('click', () => {
   errorText.innerText = '';
   socket.emit('createRoom');
@@ -40,7 +39,6 @@ joinBtn.addEventListener('click', () => {
   socket.emit('joinRoom', code);
 });
 
-// Socket Events
 socket.on('roomJoined', (data) => {
   myPlayerNum = data.playerNum;
   menu.classList.add('hidden');
@@ -48,7 +46,7 @@ socket.on('roomJoined', (data) => {
   gameRoomCode.innerText = data.roomCode;
   waiting.classList.remove('hidden');
 
-  // Update the HTML text nodes directly so "You" is always on the correct player
+  // Fix: Label the correct side of the scoreboard as "You"
   score1.previousSibling.textContent = myPlayerNum === 1 ? 'Player 1 (You): ' : 'Player 1 (Opponent): ';
   score2.previousSibling.textContent = myPlayerNum === 2 ? 'Player 2 (You): ' : 'Player 2 (Opponent): ';
 });
@@ -65,25 +63,33 @@ socket.on('gameStart', (state) => {
   requestAnimationFrame(drawGame);
 });
 
-// Updated to show Points AND Sets
 socket.on('gameState', (state) => {
   gameState = state;
   score1.innerText = `Pts: ${state.scores[1]} | Sets: ${state.sets[1]}`;
   score2.innerText = `Pts: ${state.scores[2]} | Sets: ${state.sets[2]}`;
+
+  if (state.state === 'playing') {
+    ballTrail.push({ x: state.ball.x, y: state.ball.y });
+    if (ballTrail.length > 6) ballTrail.shift();
+  } else {
+    ballTrail = [];
+  }
 });
 
-// Handle Set Wins
+socket.on('pointScored', (data) => {
+  pointMessage = `🎾 Point won by Player ${data.scorer}!`;
+  setTimeout(() => { pointMessage = null; }, 1900); // Clears right before next serve
+});
+
 socket.on('setComplete', (data) => {
   winnerText.innerText = `🎾 Set Won by Player ${data.setWinner} (${data.finalScores[1]} - ${data.finalScores[2]})!`;
   overlay.classList.remove('hidden');
-  if (restartBtn) restartBtn.classList.add('hidden'); // Hide button, it autoskips
+  if (restartBtn) restartBtn.classList.add('hidden');
   
-  // Instantly update UI scoreboard to show updated Sets
   score1.innerText = `Pts: 0 | Sets: ${data.sets[1]}`;
   score2.innerText = `Pts: 0 | Sets: ${data.sets[2]}`;
 });
 
-// Start next set automatically after 3 seconds
 socket.on('nextSetStart', (state) => {
   gameState = state;
   overlay.classList.add('hidden');
@@ -103,7 +109,6 @@ socket.on('errorMsg', (msg) => {
   errorText.innerText = msg;
 });
 
-// Input Handling
 window.addEventListener('keydown', (e) => {
   const key = e.key.toLowerCase();
   if (key in keys && !keys[key]) {
@@ -130,7 +135,6 @@ function sendMove() {
   let left = keys.a;
   let right = keys.d;
 
-  // Invert controls for Player 2 so "W" always moves forward towards the net on their screen
   if (myPlayerNum === 2) {
     up = keys.s;
     down = keys.w;
@@ -141,33 +145,24 @@ function sendMove() {
   socket.emit('move', { up, down, left, right });
 }
 
-// continuous movement loop sending to server
 setInterval(() => {
   if (keys.w || keys.a || keys.s || keys.d) sendMove();
 }, 1000 / 30);
 
-// Rendering Loop
 function drawGame() {
   if (!gameState || gameState.state === 'setover') return;
 
-  // Clear court
   ctx.fillStyle = '#15803d';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Draw Court Lines
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
   ctx.lineWidth = 3;
-  
-  // Outer boundary
   ctx.strokeRect(15, 15, canvas.width - 30, canvas.height - 30);
-  
-  // Center service line
   ctx.beginPath();
   ctx.moveTo(canvas.width / 2, 15);
   ctx.lineTo(canvas.width / 2, canvas.height - 15);
   ctx.stroke();
 
-  // The Net
   ctx.strokeStyle = '#ffffff';
   ctx.lineWidth = 6;
   ctx.beginPath();
@@ -175,19 +170,17 @@ function drawGame() {
   ctx.lineTo(canvas.width, canvas.height / 2);
   ctx.stroke();
 
-  // --- APPLY CAMERA FLIP FOR PLAYER 2 ---
+  // --- CAMERA FLIP FOR PLAYER 2 ---
   ctx.save();
   if (myPlayerNum === 2) {
     ctx.translate(canvas.width / 2, canvas.height / 2);
-    ctx.rotate(Math.PI); // Rotate 180 degrees!
+    ctx.rotate(Math.PI); 
     ctx.translate(-canvas.width / 2, -canvas.height / 2);
   }
 
-  // Draw Players
   for (const id in gameState.players) {
     const p = gameState.players[id];
     
-    // Player body
     ctx.beginPath();
     ctx.arc(p.x, p.y, 25, 0, Math.PI * 2);
     ctx.fillStyle = p.num === 1 ? '#38bdf8' : '#f43f5e';
@@ -196,7 +189,6 @@ function drawGame() {
     ctx.strokeStyle = '#ffffff';
     ctx.stroke();
 
-    // Racket swing animation
     ctx.save();
     ctx.translate(p.x, p.y);
     const swingAngle = p.swinging ? (p.num === 1 ? -0.8 : 0.8) : 0;
@@ -206,21 +198,30 @@ function drawGame() {
     ctx.restore();
   }
 
-  // Draw Ball
+  if (gameState.ball.speed > 8 && ballTrail.length > 1) {
+    ctx.beginPath();
+    ctx.moveTo(ballTrail[0].x, ballTrail[0].y);
+    for (let i = 1; i < ballTrail.length; i++) {
+      ctx.lineTo(ballTrail[i].x, ballTrail[i].y);
+    }
+    ctx.lineTo(gameState.ball.x, gameState.ball.y);
+    ctx.strokeStyle = 'rgba(234, 179, 8, 0.4)';
+    ctx.lineWidth = 10;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+  }
+
   const ball = gameState.ball;
   ctx.beginPath();
   ctx.arc(ball.x, ball.y, 8, 0, Math.PI * 2);
-  ctx.fillStyle = '#eab308'; // Bright yellow
+  ctx.fillStyle = '#eab308';
   ctx.fill();
   ctx.lineWidth = 2;
   ctx.strokeStyle = '#ffffff';
   ctx.stroke();
 
-  // --- RESTORE ORIENTATION FOR TEXT ---
-  // (We restore the canvas so our text doesn't render upside down!)
   ctx.restore();
 
-  // Draw "YOU" Tag (Manually map the coordinates if flipped)
   for (const id in gameState.players) {
     const p = gameState.players[id];
     if (p.num === myPlayerNum) {
@@ -234,24 +235,30 @@ function drawGame() {
     }
   }
 
-  // Draw Hit Timing Feedback Popups
   for (let i = hitEffects.length - 1; i >= 0; i--) {
     const fx = hitEffects[i];
     ctx.fillStyle = `rgba(251, 191, 36, ${fx.alpha})`;
     ctx.font = 'bold 16px sans-serif';
     ctx.textAlign = 'center';
     
-    // Map absolute effect coords to visually flipped coords
     const fxX = myPlayerNum === 2 ? canvas.width - fx.x : fx.x;
     const fxY = myPlayerNum === 2 ? canvas.height - fx.y : fx.y;
     
     ctx.fillText(fx.text, fxX, fxY - 15 - fx.floatY);
-    fx.floatY += 1; // Makes the text always float visually UP on the screen
+    fx.floatY += 1; 
     fx.alpha -= 0.02;
     if (fx.alpha <= 0) hitEffects.splice(i, 1);
   }
 
-  // Draw Serve Overlay if waiting for a serve
+  if (pointMessage) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(0, canvas.height / 2 - 40, canvas.width, 80);
+    ctx.fillStyle = '#fbbf24';
+    ctx.font = 'bold 26px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(pointMessage, canvas.width / 2, canvas.height / 2 + 10);
+  }
+
   if (gameState.state === 'serving') {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
     ctx.fillRect(0, canvas.height / 2 - 30, canvas.width, 60);

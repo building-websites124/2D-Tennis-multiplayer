@@ -6,7 +6,6 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
-
 app.use(express.static(path.join(__dirname, 'public')));
 
 const rooms = {};
@@ -24,15 +23,14 @@ io.on('connection', (socket) => {
     rooms[roomCode] = {
       players: {},
       ball: { x: COURT_WIDTH / 2, y: NET_Y, vx: 0, vy: 0, speed: 5, inPlay: false },
-      scores: { 1: 0, 2: 0 }, // Current game points
-      sets: { 1: 0, 2: 0 },   // Total Sets won
-      state: 'waiting',       // waiting, serving, playing, setover, gameover
+      scores: { 1: 0, 2: 0 }, 
+      sets: { 1: 0, 2: 0 },   
+      state: 'waiting',       // waiting, serving, playing, scored, setover
       serverTurn: 1,
       pointsPlayed: 0,
       lastHitBy: null,
       winner: null
     };
-    
     joinRoom(socket, roomCode);
   });
 
@@ -57,7 +55,7 @@ io.on('connection', (socket) => {
       id: socket.id,
       num: playerNum,
       x: COURT_WIDTH / 2,
-      y: playerNum === 1 ? COURT_HEIGHT - 60 : 60,
+      y: playerNum === 1 ? COURT_HEIGHT - 40 : 40,
       swinging: false
     };
 
@@ -65,7 +63,6 @@ io.on('connection', (socket) => {
     socket.roomCode = roomCode;
     socket.emit('roomJoined', { roomCode, playerNum });
 
-    // When both players are in, START THE PHYSICS LOOP!
     if (Object.keys(room.players).length === 2) {
       resetPositionsAndServe(room);
       io.to(roomCode).emit('gameStart', room);
@@ -76,19 +73,18 @@ io.on('connection', (socket) => {
 
   socket.on('move', (data) => {
     const room = rooms[socket.roomCode];
-    // Allow movement during both playing and serving states
-    if (!room || (room.state !== 'playing' && room.state !== 'serving')) return;
+    // Strict Tennis Rule: Movement is locked during 'serving' and 'scored' pauses!
+    if (!room || room.state !== 'playing') return;
+    
     const player = room.players[socket.id];
     if (!player) return;
 
-    // Increased player speed from 6 to 9.5 for snappier court coverage!
-    const speed = 9.5;
+    const speed = 9.5; // Upgraded speed for faster court coverage
     if (data.up) player.y -= speed;
     if (data.down) player.y += speed;
     if (data.left) player.x -= speed;
     if (data.right) player.x += speed;
 
-    // Boundary enforcement (can't cross the net or leave court)
     player.x = Math.max(PLAYER_RADIUS, Math.min(COURT_WIDTH - PLAYER_RADIUS, player.x));
     if (player.num === 1) {
       player.y = Math.max(NET_Y + PLAYER_RADIUS, Math.min(COURT_HEIGHT - PLAYER_RADIUS, player.y));
@@ -103,45 +99,45 @@ io.on('connection', (socket) => {
     const player = room.players[socket.id];
     if (!player) return;
 
+    // Handle initial serve
     if (room.state === 'serving') {
       if (player.num === room.serverTurn) {
-        room.state = 'playing';
+        room.state = 'playing'; // Unlocks movement!
         player.swinging = true;
         setTimeout(() => { if (player) player.swinging = false; }, 150);
         
         const ball = room.ball;
-        ball.speed = 9; // Fast serve
+        ball.speed = 9; 
         ball.vy = player.num === 1 ? -ball.speed : ball.speed;
-        // Angle it cross-court!
         ball.vx = player.x > COURT_WIDTH / 2 ? -3 : 3;
         room.lastHitBy = player.num;
         
         io.to(socket.roomCode).emit('hitFeedback', { x: ball.x, y: ball.y, quality: "Serve!" });
       }
-      return; // Skip normal hit physics during the toss phase
+      return; 
     }
 
     player.swinging = true;
     setTimeout(() => { if (player) player.swinging = false; }, 150);
 
-    // Hit Physics & Distance Calculation (Spandan, this is just simple Euclidean dist!)
+    // Hit Registration & Timing calculation
     const ball = room.ball;
     const dx = ball.x - player.x;
     const dy = ball.y - player.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
-    // Sweet spot logic
-    if (dist < 50) {
-      const accuracy = 1 - (dist / 50); 
-      let speedMultiplier = 6;
-      let hitQuality = "Weak";
+    // Expanded radius to 75 to forgive ghost misses caused by internet ping
+    if (dist < 75) {
+      const accuracy = 1 - (dist / 75); 
+      let speedMultiplier = 5; 
+      let hitQuality = "Weak/Late!";
 
-      if (accuracy > 0.65) {
-        speedMultiplier = 11;
-        hitQuality = "Perfect!";
-      } else if (accuracy > 0.35) {
+      if (accuracy > 0.70) {
+        speedMultiplier = 12; // Extremely fast perfect smash
+        hitQuality = "Perfect Smash!";
+      } else if (accuracy > 0.40) {
         speedMultiplier = 8.5;
-        hitQuality = "Good";
+        hitQuality = "Good!";
       }
 
       ball.speed = speedMultiplier;
@@ -163,7 +159,6 @@ io.on('connection', (socket) => {
 
 function resetPositionsAndServe(room) {
   room.pointsPlayed = room.scores[1] + room.scores[2];
-  // Alternate server every point to keep it engaging
   room.serverTurn = (room.pointsPlayed % 2 === 0) ? 1 : 2;
   room.state = 'serving';
   
@@ -171,30 +166,26 @@ function resetPositionsAndServe(room) {
   room.ball.vy = 0;
   room.lastHitBy = null;
   
-  // Math for Parity: Even total points = Deuce Side (Right). Odd = Ad Side (Left).
   const isDeuceSide = room.pointsPlayed % 2 === 0;
   
   for (const id in room.players) {
     const p = room.players[id];
     if (p.num === 1) {
-        p.y = COURT_HEIGHT - 40; // baseline
+        p.y = COURT_HEIGHT - 40; 
         p.x = isDeuceSide ? COURT_WIDTH / 2 + 100 : COURT_WIDTH / 2 - 100;
     } else {
-        p.y = 40; // baseline
-        // From Player 2's perspective, their right is our left
+        p.y = 40; 
         p.x = isDeuceSide ? COURT_WIDTH / 2 - 100 : COURT_WIDTH / 2 + 100;
     }
   }
 }
 
-// 60 FPS Server Physics Loop
 setInterval(() => {
   for (const code in rooms) {
     const room = rooms[code];
-    if (room.state !== 'playing' && room.state !== 'serving') continue;
-
+    
+    // In serving state, glue the ball to the racket visually
     if (room.state === 'serving') {
-      // Glue the ball to the serving player's racket
       const serverPlayer = Object.values(room.players).find(p => p.num === room.serverTurn);
       if (serverPlayer) {
         room.ball.x = serverPlayer.x;
@@ -206,56 +197,58 @@ setInterval(() => {
       continue;
     }
 
+    if (room.state !== 'playing') continue;
+
     const ball = room.ball;
     ball.x += ball.vx;
     ball.y += ball.vy;
 
-    // Wall bounces
     if (ball.x <= BALL_RADIUS || ball.x >= COURT_WIDTH - BALL_RADIUS) {
       ball.vx *= -1;
     }
 
-    // Scoring conditions
     if (ball.y < 0) {
-      room.scores[1]++;
-      checkWin(room, code, 1);
+      handlePoint(room, code, 1);
     } else if (ball.y > COURT_HEIGHT) {
-      room.scores[2]++;
-      checkWin(room, code, 2);
+      handlePoint(room, code, 2);
     }
 
-    // Broadcast state if still playing
     if (room.state === 'playing') {
       io.to(code).emit('gameState', {
-        players: room.players,
-        ball: room.ball,
-        scores: room.scores,
-        sets: room.sets,
-        state: room.state,
-        serverTurn: room.serverTurn
+        players: room.players, ball: room.ball, scores: room.scores, sets: room.sets, state: room.state, serverTurn: room.serverTurn
       });
     }
   }
 }, 1000 / 60);
 
-// Updated Tennis Rules: First to 6, win by 2
+function handlePoint(room, code, scorer) {
+  room.scores[scorer]++;
+  room.state = 'scored'; // Freezes physics loop and movement
+  
+  io.to(code).emit('gameState', {
+    players: room.players, ball: room.ball, scores: room.scores, sets: room.sets, state: room.state
+  });
+  io.to(code).emit('pointScored', { scorer });
+
+  setTimeout(() => {
+    if (rooms[code]) {
+      checkWin(rooms[code], code, scorer);
+    }
+  }, 2000);
+}
+
 function checkWin(room, code, scorer) {
   const p1 = room.scores[1];
   const p2 = room.scores[2];
 
-  // Did someone hit 6+ points AND have a 2+ point lead? (e.g. 6-4, 7-5)
   if ((p1 >= 6 || p2 >= 6) && Math.abs(p1 - p2) >= 2) {
     room.sets[scorer]++;       
     room.state = 'setover';
     
-    // Broadcast set win
     io.to(code).emit('setComplete', { 
-      setWinner: scorer, 
-      finalScores: { ...room.scores }, 
-      sets: room.sets 
+      setWinner: scorer, finalScores: { ...room.scores }, sets: room.sets 
     });
 
-    // Wait 3 seconds, then reset points to 0-0 and start next set
     setTimeout(() => {
       if (rooms[code]) {
         rooms[code].scores = { 1: 0, 2: 0 };
@@ -264,8 +257,11 @@ function checkWin(room, code, scorer) {
       }
     }, 3000);
   } else {
-    // Normal point won, reset for next serve immediately
     resetPositionsAndServe(room);
+    // Force a broadcast so clients see the new positions immediately
+    io.to(code).emit('gameState', {
+      players: room.players, ball: room.ball, scores: room.scores, sets: room.sets, state: room.state, serverTurn: room.serverTurn
+    });
   }
 }
 
