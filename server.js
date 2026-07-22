@@ -18,7 +18,22 @@ const BALL_RADIUS = 8;
 io.on('connection', (socket) => {
   console.log(`Player connected: ${socket.id}`);
 
+  // CRITICAL FIX: Explicit cleanup function to prevent memory leaks
+  function leaveCurrentRoom() {
+    if (socket.roomCode && rooms[socket.roomCode]) {
+      // Notify the opponent and destroy the orphaned room state
+      io.to(socket.roomCode).emit('opponentLeft');
+      delete rooms[socket.roomCode]; 
+    }
+    if (socket.roomCode) {
+      socket.leave(socket.roomCode);
+      socket.roomCode = null;
+    }
+  }
+
   socket.on('createRoom', () => {
+    leaveCurrentRoom(); // Purge old room if user spams "Create Room"
+
     const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
     rooms[roomCode] = {
       players: {},
@@ -31,7 +46,7 @@ io.on('connection', (socket) => {
       lastHitBy: null,
       winner: null
     };
-    joinRoom(socket, roomCode);
+    assignToRoom(socket, roomCode);
   });
 
   socket.on('joinRoom', (roomCode) => {
@@ -44,10 +59,12 @@ io.on('connection', (socket) => {
       socket.emit('errorMsg', 'This room is already full!');
       return;
     }
-    joinRoom(socket, roomCode);
+    
+    leaveCurrentRoom(); // Purge old state before joining new room
+    assignToRoom(socket, roomCode);
   });
 
-  function joinRoom(socket, roomCode) {
+  function assignToRoom(socket, roomCode) {
     const room = rooms[roomCode];
     const playerNum = Object.keys(room.players).length === 0 ? 1 : 2;
     
@@ -73,13 +90,12 @@ io.on('connection', (socket) => {
 
   socket.on('move', (data) => {
     const room = rooms[socket.roomCode];
-    // Strict Tennis Rule: Movement is locked during 'serving' and 'scored' pauses!
     if (!room || room.state !== 'playing') return;
     
     const player = room.players[socket.id];
     if (!player) return;
 
-    const speed = 9.5; // Upgraded speed for faster court coverage
+    const speed = 9.5; 
     if (data.up) player.y -= speed;
     if (data.down) player.y += speed;
     if (data.left) player.x -= speed;
@@ -102,7 +118,7 @@ io.on('connection', (socket) => {
     // Handle initial serve
     if (room.state === 'serving') {
       if (player.num === room.serverTurn) {
-        room.state = 'playing'; // Unlocks movement!
+        room.state = 'playing'; 
         player.swinging = true;
         setTimeout(() => { if (player) player.swinging = false; }, 150);
         
@@ -120,20 +136,18 @@ io.on('connection', (socket) => {
     player.swinging = true;
     setTimeout(() => { if (player) player.swinging = false; }, 150);
 
-    // Hit Registration & Timing calculation
     const ball = room.ball;
     const dx = ball.x - player.x;
     const dy = ball.y - player.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
-    // Expanded radius to 75 to forgive ghost misses caused by internet ping
     if (dist < 75) {
       const accuracy = 1 - (dist / 75); 
       let speedMultiplier = 5; 
       let hitQuality = "Weak/Late!";
 
       if (accuracy > 0.70) {
-        speedMultiplier = 12; // Extremely fast perfect smash
+        speedMultiplier = 12; 
         hitQuality = "Perfect Smash!";
       } else if (accuracy > 0.40) {
         speedMultiplier = 8.5;
@@ -150,10 +164,8 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    if (socket.roomCode && rooms[socket.roomCode]) {
-      io.to(socket.roomCode).emit('opponentLeft');
-      delete rooms[socket.roomCode];
-    }
+    console.log(`Player disconnected: ${socket.id}`);
+    leaveCurrentRoom(); // Completely purges the room from memory on disconnect
   });
 });
 
@@ -184,7 +196,6 @@ setInterval(() => {
   for (const code in rooms) {
     const room = rooms[code];
     
-    // In serving state, glue the ball to the racket visually
     if (room.state === 'serving') {
       const serverPlayer = Object.values(room.players).find(p => p.num === room.serverTurn);
       if (serverPlayer) {
@@ -223,7 +234,7 @@ setInterval(() => {
 
 function handlePoint(room, code, scorer) {
   room.scores[scorer]++;
-  room.state = 'scored'; // Freezes physics loop and movement
+  room.state = 'scored'; 
   
   io.to(code).emit('gameState', {
     players: room.players, ball: room.ball, scores: room.scores, sets: room.sets, state: room.state
@@ -258,7 +269,6 @@ function checkWin(room, code, scorer) {
     }, 3000);
   } else {
     resetPositionsAndServe(room);
-    // Force a broadcast so clients see the new positions immediately
     io.to(code).emit('gameState', {
       players: room.players, ball: room.ball, scores: room.scores, sets: room.sets, state: room.state, serverTurn: room.serverTurn
     });

@@ -46,7 +46,6 @@ socket.on('roomJoined', (data) => {
   gameRoomCode.innerText = data.roomCode;
   waiting.classList.remove('hidden');
 
-  // Fix: Label the correct side of the scoreboard as "You"
   score1.previousSibling.textContent = myPlayerNum === 1 ? 'Player 1 (You): ' : 'Player 1 (Opponent): ';
   score2.previousSibling.textContent = myPlayerNum === 2 ? 'Player 2 (You): ' : 'Player 2 (Opponent): ';
 });
@@ -78,7 +77,7 @@ socket.on('gameState', (state) => {
 
 socket.on('pointScored', (data) => {
   pointMessage = `🎾 Point won by Player ${data.scorer}!`;
-  setTimeout(() => { pointMessage = null; }, 1900); // Clears right before next serve
+  setTimeout(() => { pointMessage = null; }, 1900); 
 });
 
 socket.on('setComplete', (data) => {
@@ -101,7 +100,7 @@ socket.on('hitFeedback', (data) => {
 });
 
 socket.on('opponentLeft', () => {
-  alert('Your friend disconnected! Returning to menu.');
+  alert('Your opponent disconnected! Returning to menu.');
   location.reload();
 });
 
@@ -170,7 +169,6 @@ function drawGame() {
   ctx.lineTo(canvas.width, canvas.height / 2);
   ctx.stroke();
 
-  // --- CAMERA FLIP FOR PLAYER 2 ---
   ctx.save();
   if (myPlayerNum === 2) {
     ctx.translate(canvas.width / 2, canvas.height / 2);
