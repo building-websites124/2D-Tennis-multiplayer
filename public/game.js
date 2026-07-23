@@ -151,23 +151,65 @@ setInterval(() => {
 function drawGame() {
   if (!gameState || gameState.state === 'setover') return;
 
-  ctx.fillStyle = '#15803d';
+  // Outer boundary (Dark Green)
+  ctx.fillStyle = '#115e59';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
-  ctx.lineWidth = 3;
-  ctx.strokeRect(15, 15, canvas.width - 30, canvas.height - 30);
+  // Inner Court (US Open Blue)
+  ctx.fillStyle = '#1e40af';
+  ctx.fillRect(40, 40, canvas.width - 80, canvas.height - 80);
+
+  // Court Lines
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 4;
+
+  // Doubles boundaries
+  ctx.strokeRect(40, 40, canvas.width - 80, canvas.height - 80);
+
+  // Singles boundaries
   ctx.beginPath();
-  ctx.moveTo(canvas.width / 2, 15);
-  ctx.lineTo(canvas.width / 2, canvas.height - 15);
+  ctx.moveTo(90, 40);
+  ctx.lineTo(90, canvas.height - 40);
+  ctx.moveTo(canvas.width - 90, 40);
+  ctx.lineTo(canvas.width - 90, canvas.height - 40);
   ctx.stroke();
 
-  ctx.strokeStyle = '#ffffff';
+  // Service lines (Horizontal)
+  ctx.beginPath();
+  ctx.moveTo(90, 190);
+  ctx.lineTo(canvas.width - 90, 190);
+  ctx.moveTo(90, canvas.height - 190);
+  ctx.lineTo(canvas.width - 90, canvas.height - 190);
+  ctx.stroke();
+
+  // Center service line (Vertical)
+  ctx.beginPath();
+  ctx.moveTo(canvas.width / 2, 190);
+  ctx.lineTo(canvas.width / 2, canvas.height - 190);
+  ctx.stroke();
+
+  // Baseline Center Marks
+  ctx.beginPath();
+  ctx.moveTo(canvas.width / 2, 40);
+  ctx.lineTo(canvas.width / 2, 55);
+  ctx.moveTo(canvas.width / 2, canvas.height - 40);
+  ctx.lineTo(canvas.width / 2, canvas.height - 55);
+  ctx.stroke();
+
+  // The Net
+  ctx.strokeStyle = '#d4d4d8';
   ctx.lineWidth = 6;
   ctx.beginPath();
-  ctx.moveTo(0, canvas.height / 2);
-  ctx.lineTo(canvas.width, canvas.height / 2);
+  ctx.moveTo(15, canvas.height / 2);
+  ctx.lineTo(canvas.width - 15, canvas.height / 2);
   ctx.stroke();
+  
+  // Net Posts
+  ctx.fillStyle = '#27272a';
+  ctx.beginPath();
+  ctx.arc(15, canvas.height / 2, 8, 0, Math.PI * 2);
+  ctx.arc(canvas.width - 15, canvas.height / 2, 8, 0, Math.PI * 2);
+  ctx.fill();
 
   ctx.save();
   if (myPlayerNum === 2) {
@@ -176,9 +218,11 @@ function drawGame() {
     ctx.translate(-canvas.width / 2, -canvas.height / 2);
   }
 
+  // Draw Players
   for (const id in gameState.players) {
     const p = gameState.players[id];
     
+    // Player Body
     ctx.beginPath();
     ctx.arc(p.x, p.y, 25, 0, Math.PI * 2);
     ctx.fillStyle = p.num === 1 ? '#38bdf8' : '#f43f5e';
@@ -187,6 +231,7 @@ function drawGame() {
     ctx.strokeStyle = '#ffffff';
     ctx.stroke();
 
+    // Player Racket
     ctx.save();
     ctx.translate(p.x, p.y);
     const swingAngle = p.swinging ? (p.num === 1 ? -0.8 : 0.8) : 0;
@@ -203,13 +248,21 @@ function drawGame() {
       ctx.lineTo(ballTrail[i].x, ballTrail[i].y);
     }
     ctx.lineTo(gameState.ball.x, gameState.ball.y);
-    ctx.strokeStyle = 'rgba(234, 179, 8, 0.4)';
+    // Dynamic trail color based on spin/speed
+    ctx.strokeStyle = gameState.ball.spin !== 0 ? 'rgba(239, 68, 68, 0.5)' : 'rgba(234, 179, 8, 0.4)';
     ctx.lineWidth = 10;
     ctx.lineCap = 'round';
     ctx.stroke();
   }
 
+  // Draw Ball shadow
   const ball = gameState.ball;
+  ctx.beginPath();
+  ctx.arc(ball.x + 4, ball.y + 4, 8, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+  ctx.fill();
+
+  // Draw Ball
   ctx.beginPath();
   ctx.arc(ball.x, ball.y, 8, 0, Math.PI * 2);
   ctx.fillStyle = '#eab308';
@@ -235,16 +288,16 @@ function drawGame() {
 
   for (let i = hitEffects.length - 1; i >= 0; i--) {
     const fx = hitEffects[i];
-    ctx.fillStyle = `rgba(251, 191, 36, ${fx.alpha})`;
-    ctx.font = 'bold 16px sans-serif';
+    ctx.fillStyle = fx.text.includes("SPIN") ? `rgba(239, 68, 68, ${fx.alpha})` : `rgba(251, 191, 36, ${fx.alpha})`;
+    ctx.font = 'bold 18px sans-serif';
     ctx.textAlign = 'center';
     
     const fxX = myPlayerNum === 2 ? canvas.width - fx.x : fx.x;
     const fxY = myPlayerNum === 2 ? canvas.height - fx.y : fx.y;
     
     ctx.fillText(fx.text, fxX, fxY - 15 - fx.floatY);
-    fx.floatY += 1; 
-    fx.alpha -= 0.02;
+    fx.floatY += 1.5; 
+    fx.alpha -= 0.025;
     if (fx.alpha <= 0) hitEffects.splice(i, 1);
   }
 
