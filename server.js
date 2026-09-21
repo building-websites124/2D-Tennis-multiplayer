@@ -37,7 +37,6 @@ io.on('connection', (socket) => {
     const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
     rooms[roomCode] = {
       players: {},
-      // NEW: Added spin property to ball
       ball: { x: COURT_WIDTH / 2, y: NET_Y, vx: 0, vy: 0, speed: 5, spin: 0, inPlay: false },
       scores: { 1: 0, 2: 0 }, 
       sets: { 1: 0, 2: 0 },   
@@ -69,7 +68,6 @@ io.on('connection', (socket) => {
     const room = rooms[roomCode];
     const playerNum = Object.keys(room.players).length === 0 ? 1 : 2;
     
-    // NEW: Players now track their current vx/vy to allow for spin calculations
     room.players[socket.id] = {
       id: socket.id,
       num: playerNum,
@@ -94,14 +92,13 @@ io.on('connection', (socket) => {
 
   socket.on('move', (data) => {
     const room = rooms[socket.roomCode];
+    // Strict Tennis Rule: Movement is locked during 'serving' and 'scored' pauses!
     if (!room || room.state !== 'playing') return;
     
     const player = room.players[socket.id];
     if (!player) return;
 
-    const speed = 9.5; 
-    
-    // Reset velocities every move tick, recalculate based on input
+    const speed = 9.5; // Upgraded speed for faster court coverage
     player.vx = 0;
     player.vy = 0;
 
@@ -110,11 +107,9 @@ io.on('connection', (socket) => {
     if (data.left) player.vx -= speed;
     if (data.right) player.vx += speed;
 
-    // Apply movement
     player.x += player.vx;
     player.y += player.vy;
 
-    // Boundary constraints
     player.x = Math.max(PLAYER_RADIUS, Math.min(COURT_WIDTH - PLAYER_RADIUS, player.x));
     if (player.num === 1) {
       player.y = Math.max(NET_Y + PLAYER_RADIUS, Math.min(COURT_HEIGHT - PLAYER_RADIUS, player.y));
@@ -140,7 +135,7 @@ io.on('connection', (socket) => {
         ball.speed = 9; 
         ball.vy = player.num === 1 ? -ball.speed : ball.speed;
         ball.vx = player.x > COURT_WIDTH / 2 ? -3 : 3;
-        ball.spin = 0; // No spin on serves
+        ball.spin = 0;
         room.lastHitBy = player.num;
         
         io.to(socket.roomCode).emit('hitFeedback', { x: ball.x, y: ball.y, quality: "Serve!" });
@@ -151,44 +146,41 @@ io.on('connection', (socket) => {
     player.swinging = true;
     setTimeout(() => { if (player) player.swinging = false; }, 150);
 
+    // Hit Registration & Timing calculation
     const ball = room.ball;
     const dx = ball.x - player.x;
     const dy = ball.y - player.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
+    // Expanded radius to 75 to forgive ghost misses caused by internet ping
     if (dist < 75) {
       const accuracy = 1 - (dist / 75); 
       let speedMultiplier = 5; 
-      let hitQuality = "Weak/Late";
+      let hitQuality = "Weak/Late!";
 
       if (accuracy > 0.70) {
-        speedMultiplier = 12; 
-        hitQuality = "Perfect Smash";
+        speedMultiplier = 12; // Extremely fast perfect smash
+        hitQuality = "Perfect Smash!";
       } else if (accuracy > 0.40) {
         speedMultiplier = 8.5;
-        hitQuality = "Good";
+        hitQuality = "Good!";
       }
 
       ball.speed = speedMultiplier;
       ball.vy = player.num === 1 ? -ball.speed : ball.speed;
       
-      // FEATURE: Aiming (Based on where ball hits racket)
+      // Base aim based on where the ball hits the racket
       let baseAimVx = (dx / 25) * (ball.speed * 0.7);
       
-      // FEATURE: Spin (Based on player's momentum at time of swing)
-      // 35% of player's speed is transferred as spin momentum
-      let spinAdded = (player.vx || 0) * 0.35; 
+      // Add spin based on player's horizontal movement
+      let spinAdded = (player.vx || 0) * 0.25; 
       
       ball.vx = baseAimVx + spinAdded;
-      
-      // Affects the ball's trajectory mid-air every frame
-      ball.spin = spinAdded * 0.05; 
-      
+      ball.spin = spinAdded * 0.015; // Much gentler curve to prevent wild paths
       room.lastHitBy = player.num;
 
-      // Add flair to hit feedback if they applied severe spin
       let feedbackText = hitQuality;
-      if (Math.abs(spinAdded) > 1.5) feedbackText += " + SPIN!";
+      if (Math.abs(spinAdded) > 1) feedbackText += " + SPIN!";
 
       io.to(socket.roomCode).emit('hitFeedback', { x: ball.x, y: ball.y, quality: feedbackText });
     }
@@ -246,7 +238,7 @@ setInterval(() => {
 
     const ball = room.ball;
     
-    // FEATURE: Apply mid-air curve/spin physics
+    // Apply gentle mid-air curve
     if (ball.spin) {
       ball.vx += ball.spin;
     }
@@ -254,10 +246,15 @@ setInterval(() => {
     ball.x += ball.vx;
     ball.y += ball.vy;
 
-    // Bounce off side walls (reverses spin direction too)
-    if (ball.x <= BALL_RADIUS || ball.x >= COURT_WIDTH - BALL_RADIUS) {
+    // FIXED: Prevent wall-sticking oscillation by pushing ball out of bounds
+    if (ball.x <= BALL_RADIUS) {
+      ball.x = BALL_RADIUS;
       ball.vx *= -1;
-      ball.spin *= -1; 
+      ball.spin *= -1;
+    } else if (ball.x >= COURT_WIDTH - BALL_RADIUS) {
+      ball.x = COURT_WIDTH - BALL_RADIUS;
+      ball.vx *= -1;
+      ball.spin *= -1;
     }
 
     if (ball.y < 0) {
